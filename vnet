@@ -1,0 +1,89 @@
+#! /bin/sh
+
+case "$1" in
+
+create)
+	if test $# -ne 2
+	then
+		echo Usage: $0 create SIZE
+		exit 1
+	fi
+
+	echo Creating virtual network of $2 nodes.
+	brctl addbr vnetbr
+	ip link set vnetbr up
+	ip address add 10.0.0.254/24 dev vnetbr 
+
+	for i in `seq $2`
+	do
+		echo Creating node $i.
+		unshare -n $0 node $i
+		ip link set vnet$i up
+		brctl addif vnetbr vnet$i
+	done
+
+	for i in `seq $2`
+	do
+		until ping -c 1 10.0.0.$i >/dev/null
+		do
+			echo Waiting for nodes to become pingable.
+			sleep 1
+		done
+	done
+
+	echo Ready.
+	;;
+
+node)
+	if test $# -ne 2
+	then
+		echo Usage: $0 node INDEX
+		exit 1
+	fi
+
+	ip link add name eth0 type veth peer name vnet$2
+	ip link set lo up
+	ip link set eth0 up
+	ip link set vnet$2 netns 1
+	ip address add 10.0.0.$2/24 dev eth0
+	exec `which sshd` -o "PidFile /tmp/vnet$2-sshd.pid"
+	;;
+
+link)
+	if test $# -ne 3
+	then
+		echo Usage: $0 link I J
+		exit 1
+	fi
+
+	echo Creating a direct link between nodes $2 and $3.
+	ip link add name vnet$2-$3 type veth peer name vnet$3-$2
+	ip link set vnet$2-$3 netns `cat /tmp/vnet$2-sshd.pid` name vnet$3
+	ip link set vnet$3-$2 netns `cat /tmp/vnet$3-sshd.pid` name vnet$2
+	;;
+
+destroy)
+	if test $# -ne 1
+	then
+		echo Usage: $0 destroy
+		exit 1
+	fi
+
+	echo Cleaning up virtual network.
+	kill `cat /tmp/vnet*-sshd.pid`
+	ip link set vnetbr down
+	brctl delbr vnetbr
+	for l in `grep vnet /proc/net/dev | cut -d: -f1`
+	do
+		ip link del $l
+	done
+	;;
+
+*)
+	echo Usage:
+	echo "  $0 create   Create a set of virtual nodes."
+	echo "  $0 link     Create a point-to-point link between nodes."
+	echo "  $0 destroy  Destroy the virtual network."
+	;;
+
+esac

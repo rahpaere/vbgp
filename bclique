@@ -120,8 +120,6 @@ create)
 				$vnet link $i $j
 			fi
 		done
-		ssh -f 10.0.0.$i rtmon -4 file /tmp/vnet$i-rtmon.log route
-		$0 start-node $i
 	done
 
 	echo Configuring destination.
@@ -129,6 +127,12 @@ create)
 	bgpdconf $d >/tmp/vnet$d-bgpd.conf
 	$vnet link $d 1
 	$vnet link $d 2
+
+	for i in `seq $n`
+	do
+		ssh -f 10.0.0.$i rtmon -4 file /tmp/vnet$i-rtmon.log route
+		$0 start-node $i
+	done
 	$0 start-node $d
 	;;
 

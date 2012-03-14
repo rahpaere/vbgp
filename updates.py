@@ -5,6 +5,7 @@ from sys import stdin, argv
 import re
 
 timestamp_format = "Timestamp: %a %b %d %H:%M:%S %Y %f us "
+microseconds_format = re.compile("(\d+) us")
 update_format = re.compile("(Deleted )?192\.168\.0\.0/16.*via 10.(\d+).(\d+).(\d+)")
 
 def reachable(nexthops):
@@ -24,6 +25,11 @@ for filename in argv[1:]:
 		for line in log:
 			try:
 				t = datetime.strptime(line, timestamp_format)
+				m = microseconds_format.search(line)
+				if m is None:
+					print "Bad microseconds."
+					continue
+				t = t.replace(microsecond=int(m.group(1)))
 				continue
 			except ValueError:
 				pass
@@ -51,4 +57,5 @@ for t, node, nexthop in updates:
 	nexthops[node] = nexthop
 	r = t - start
 	print ",".join([str(int(r.seconds * 1e6 + r.microseconds)), str(reachable(nexthops))] +  [n is not None and str(n) or " " for n in nexthops])
+	#print ",".join([str(r.total_seconds()), str(reachable(nexthops))] +  [n is not None and str(n) or " " for n in nexthops])
 

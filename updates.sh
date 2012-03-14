@@ -13,4 +13,5 @@ do
 	files="$files $o"
 	ip monitor file /tmp/vnet$i-rtmon.log >$o
 done
-`dirname $0`/updates.py $files
+`dirname $0`/updates.py $files | tee updates.dat
+gnuplot `dirname $0`/updates.gnuplot

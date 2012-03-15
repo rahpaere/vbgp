@@ -83,11 +83,21 @@ bgpdconf() {
 		else
 			continue
 		fi
+		if test 1 -eq $1
+		then
+			peer=$self
+			self=127.0.0.1
+		fi
 		echo " neighbor $peer remote-as" `expr 65000 + $i`
 		echo " neighbor $peer update-source $self"
 	done
 
-	if test $1 -le 2
+	if test $1 -eq 1
+	then
+		echo " neighbor 10.$d.$1.2 remote-as" `expr 65000 + $d`
+		echo " neighbor 10.$d.$1.2 update-source 127.0.0.1"
+	fi
+	if test $1 -eq 2
 	then
 		echo " neighbor 10.$d.$1.1 remote-as" `expr 65000 + $d`
 		echo " neighbor 10.$d.$1.1 update-source 10.$d.$1.2"
@@ -128,37 +138,54 @@ create)
 	$vnet link $d 1
 	$vnet link $d 2
 
-	for i in `seq $n`
+	echo Configuring TCPR.
+	for i in `seq 2 $d`
 	do
-		ssh -f 10.0.0.$i rtmon -4 file /tmp/vnet$i-rtmon.log route
-		$0 start-node $i
+		ssh -f 10.0.0.1 tcpr-setup-iptables -i 127.0.0.$i -e 10.$i.1.2 -q $i -n
 	done
-	$0 start-node $d
 	;;
 
-start-node)
+start)
 	if test $# != 2
 	then
-		echo Usage: $0 start-node INDEX
+		echo Usage: $0 start-node SIZE
 		exit 1
 	fi
+	n=$2
+	d=`expr $n + 1`
 	
-	echo Starting router $2.
-	ssh 10.0.0.$2 /usr/lib/quagga/zebra -d -f /tmp/vnet$2-zebra.conf -i /tmp/vnet$2-zebra.pid
-	ssh 10.0.0.$2 /usr/lib/quagga/bgpd -d -f /tmp/vnet$2-bgpd.conf -i /tmp/vnet$2-bgpd.pid
+	echo Starting TCPR.
+	for i in `seq 2 $d`
+	do
+		if test $i -eq 2
+		then
+			ssh -f 10.0.0.1 tcpr-filter -i 127.0.0.$i -e 10.$i.1.2 -q $i -l
+		else
+			ssh -f 10.0.0.1 tcpr-filter -i 127.0.0.$i -e 10.$i.1.2 -q $i
+		fi
+		ssh -f 10.0.0.1 tcpr-bridge -i 127.0.0.$i -a 179
+	done
+
+	for i in `seq $d`
+	do
+		echo Starting router $i.
+		ssh -f 10.0.0.$i rtmon -4 file /tmp/vnet$i-rtmon.log route
+		ssh 10.0.0.$i /usr/lib/quagga/zebra -d -f /tmp/vnet$i-zebra.conf -i /tmp/vnet$i-zebra.pid
+		ssh 10.0.0.$i /usr/lib/quagga/bgpd -d -f /tmp/vnet$i-bgpd.conf -i /tmp/vnet$i-bgpd.pid
+	done
 	;;
 
-stop-node)
-	if test $# != 2
-	then
-		echo Usage: $0 stop-node INDEX
-		exit 1
-	fi
-	
-	echo Stopping router $2.
-	pkill -f "vnet$2-(zebra|bgpd)"
+fail)
+	echo Killing router 1.
+	pkill -f "vnet1-(zebra|bgpd)"
 	;;
 
+recover)
+	echo Recovering router 1.
+	ssh 10.0.0.1 /usr/lib/quagga/zebra -d -f /tmp/vnet1-zebra.conf -i /tmp/vnet1-zebra.pid
+	ssh 10.0.0.1 /usr/lib/quagga/bgpd -d -f /tmp/vnet1-bgpd.conf -i /tmp/vnet1-bgpd.pid
+	;;
+	
 destroy)
 	if test $# != 1
 	then
@@ -171,14 +198,16 @@ destroy)
 
 	echo Cleaning up routers.
 	pkill -f vnet
+	pkill -f tcpr
 	;;
 
 *)
 	echo Usage:
-	echo "  $0 create      Create a backup-clique BGP network."
-	echo "  $0 start-node  Run a BGP daemon."
-	echo "  $0 stop-node   Kill a BGP daemon."
-	echo "  $0 destroy     Destroy the BGP network."
+	echo "  $0 create   Create a backup-clique BGP network."
+	echo "  $0 start    Start the routers."
+	echo "  $0 fail     Simulate failure."
+	echo "  $0 recover  Simulate recovery."
+	echo "  $0 destroy  Destroy the BGP network."
 	;;
 
 esac

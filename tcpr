@@ -1,0 +1,22 @@
+#! /bin/sh
+
+vnet=`dirname $0`/vnet
+
+$vnet create 3
+$vnet link 1 2
+$vnet link 2 3
+
+ssh 10.0.0.1 ip addr add 10.0.1.1/24 dev vnet2
+ssh 10.0.0.2 ip addr add 10.0.1.2/24 dev vnet1
+ssh 10.0.0.2 ip addr add 10.0.3.2/24 dev vnet3
+ssh 10.0.0.3 ip addr add 10.0.3.3/24 dev vnet2
+
+ssh 10.0.0.1 ip link set vnet2 up
+ssh 10.0.0.2 ip link set vnet1 up
+ssh 10.0.0.2 ip link set vnet3 up
+ssh 10.0.0.3 ip link set vnet2 up
+
+ssh 10.0.0.1 ip route add 10.0.3.0/24 via 10.0.1.2
+ssh 10.0.0.3 ip route add 10.0.1.0/24 via 10.0.3.2
+
+ssh 10.0.0.2 sysctl net.ipv4.ip_forward=1

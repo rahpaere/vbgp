@@ -6,7 +6,7 @@ import re
 
 timestamp_format = "Timestamp: %a %b %d %H:%M:%S %Y %f us "
 microseconds_format = re.compile("(\d+) us")
-update_format = re.compile("(Deleted )?192\.168\.0\.0/16.*via 10.(\d+).(\d+).(\d+)")
+update_format = re.compile("(Deleted )?192\.168\.0\.0/16.*via 10.0.1.(\d+)")
 
 def reachable(nexthops):
 	nexthops = list(nexthops)
@@ -40,10 +40,8 @@ for filename in argv[1:]:
 
 			if m.group(1) is not None:
 				nexthop = None
-			elif m.group(4) == "1":
-				nexthop = int(m.group(2)) - 1
 			else:
-				nexthop = int(m.group(3)) - 1
+				nexthop = int(m.group(2)) - 1
 
 			updates.append((t, nodes, nexthop))
 	nodes += 1

@@ -1,44 +1,19 @@
 #! /bin/sh
 
 zebraconf() {
-	local i
-
 	echo "password secret"
 	echo "enable password secret"
 	echo "log file /tmp/vnet$1-zebra.log"
 	echo "ip forwarding"
 
-	if test $d -eq $1
+	if test ${dest} -eq $1
 	then
 		echo "interface lo"
 		echo " ip address 192.168.1.1/16"
-		echo "interface vnet1"
-		echo "  ip address 10.$d.1.1/24"
-		echo "interface vnet2"
-		echo "  ip address 10.$d.2.1/24"
-		return
 	fi
 
-	for i in `seq $n`
-	do
-		if test $i -ne $1
-		then
-			echo "interface vnet$i"
-			if test $i -lt $1
-			then
-				echo " ip address 10.$1.$i.1/24"
-			else
-				echo " ip address 10.$i.$1.2/24"
-			fi
-		fi
-	done
-
-	if test $1 -le 2
-	then
-		echo "interface vnet$d"
-		echo "  ip address 10.$d.$1.2/24"
-	fi
-
+	echo "interface vnet${hub}"
+	echo " ip address 10.0.1.$1/24"
 }
 
 bgpdconf() {
@@ -49,22 +24,22 @@ bgpdconf() {
 	echo "log file /tmp/vnet$1-bgpd.log"
 	echo "debug bgp updates"
 
-	echo "router bgp" `expr 65000 + $1`
-	echo " bgp router-id 10.0.0.$1"
+	as=`expr 65000 + $1`
+	echo "router bgp ${as}"
+	echo " bgp router-id 10.0.1.$1"
+	echo " bgp graceful-restart"
 
-	if test $d -eq $1
+	if test ${dest} -eq $1
 	then
 		echo " network 192.168.0.0/16"
-		echo " neighbor 10.$d.1.2 remote-as 65001"
-		echo " neighbor 10.$d.1.2 update-source 10.$d.1.1"
-		echo " neighbor 10.$d.2.2 remote-as" `expr 65002`
-		echo " neighbor 10.$d.2.2 update-source 10.$d.2.1"
-		echo " neighbor 10.$d.2.2 route-map backup out"
+		echo " neighbor 10.0.1.1 remote-as 65001"
+		echo " neighbor 10.0.1.2 remote-as 65002"
+		echo " neighbor 10.0.1.2 route-map backup out"
 		echo "route-map backup permit 10"
 		printf " set as-path prepend"
 		for i in `seq $n`
 		do
-			printf " %d" `expr 65000 + $d`
+			printf " ${as}"
 		done
 		echo
 		return
@@ -72,25 +47,11 @@ bgpdconf() {
 
 	for i in `seq $n`
 	do
-		if test $i -lt $1
-		then
-			peer=10.$1.$i.2
-			self=10.$1.$i.1
-		elif test $i -gt $1
-		then
-			peer=10.$i.$1.1
-			self=10.$i.$1.2
-		else
-			continue
-		fi
-		echo " neighbor $peer remote-as" `expr 65000 + $i`
-		echo " neighbor $peer update-source $self"
+		echo " neighbor 10.0.1.$i remote-as" `expr 65000 + $i`
 	done
-
-	if test $1 -le 2
+	if test 2 -ge $1
 	then
-		echo " neighbor 10.$d.$1.1 remote-as" `expr 65000 + $d`
-		echo " neighbor 10.$d.$1.1 update-source 10.$d.$1.2"
+	        echo " neighbor 10.0.1.${dest} remote-as" `expr 65000 + ${dest}`
 	fi
 }
 
@@ -104,59 +65,58 @@ create)
 		exit 1
 	fi
 	n=$2
-	d=`expr $n + 1`
+	dest=`expr $n + 1`
+	hub=`expr ${dest} + 1`
 	vnet=`dirname $0`/vnet
 
-	$vnet create $d
-	for i in `seq $n`
+	$vnet create ${hub}
+	for i in `seq ${dest}`
 	do
 		echo Configuring router $i.
 		zebraconf $i >/tmp/vnet$i-zebra.conf
 		bgpdconf $i >/tmp/vnet$i-bgpd.conf
-		for j in `seq $n`
-		do
-			if test $j -gt $i
-			then
-				$vnet link $i $j
-			fi
-		done
+		$vnet link $i ${hub}
 	done
 
-	echo Configuring destination.
-	zebraconf $d >/tmp/vnet$d-zebra.conf
-	bgpdconf $d >/tmp/vnet$d-bgpd.conf
-	$vnet link $d 1
-	$vnet link $d 2
-
-	for i in `seq $n`
+	echo Configuring hub.
+	ssh 10.0.0.${hub} brctl addbr vnetbr
+	ssh 10.0.0.${hub} ip address add 10.0.1.${hub} dev vnetbr
+	ssh 10.0.0.${hub} ip link set vnetbr up
+	for i in `seq ${dest}`
 	do
-		ssh -f 10.0.0.$i rtmon -4 file /tmp/vnet$i-rtmon.log route
-		$0 start-node $i
+		ssh 10.0.0.${hub} brctl addif vnetbr vnet$i
+		ssh 10.0.0.${hub} ip link set vnet$i up
 	done
-	$0 start-node $d
 	;;
 
-start-node)
+start)
 	if test $# != 2
 	then
-		echo Usage: $0 start-node INDEX
+		echo Usage: $0 start-node SIZE
 		exit 1
 	fi
-	
-	echo Starting router $2.
-	ssh 10.0.0.$2 /usr/lib/quagga/zebra -d -f /tmp/vnet$2-zebra.conf -i /tmp/vnet$2-zebra.pid
-	ssh 10.0.0.$2 /usr/lib/quagga/bgpd -d -f /tmp/vnet$2-bgpd.conf -i /tmp/vnet$2-bgpd.pid
+	n=$2
+	dest=`expr $n + 1`
+	hub=`expr ${dest} + 1`
+
+	for i in `seq ${dest}`
+	do
+		echo Starting router $i.
+		ssh -f 10.0.0.$i rtmon -4 file /tmp/vnet$i-rtmon.log route
+		ssh 10.0.0.$i /usr/lib/quagga/zebra -d -f /tmp/vnet$i-zebra.conf -i /tmp/vnet$i-zebra.pid
+		ssh 10.0.0.$i /usr/lib/quagga/bgpd -d -f /tmp/vnet$i-bgpd.conf -i /tmp/vnet$i-bgpd.pid
+	done
 	;;
 
-stop-node)
-	if test $# != 2
-	then
-		echo Usage: $0 stop-node INDEX
-		exit 1
-	fi
-	
-	echo Stopping router $2.
-	pkill -f "vnet$2-(zebra|bgpd)"
+fail)
+	echo Killing router 1.
+	pkill -f "vnet1-(zebra|bgpd)"
+	;;
+
+recover)
+	echo Recovering router 1.
+	ssh 10.0.0.1 /usr/lib/quagga/zebra -d -f /tmp/vnet1-zebra.conf -i /tmp/vnet1-zebra.pid
+	ssh 10.0.0.1 /usr/lib/quagga/bgpd -d -f /tmp/vnet1-bgpd.conf -i /tmp/vnet1-bgpd.pid
 	;;
 
 destroy)
@@ -171,14 +131,16 @@ destroy)
 
 	echo Cleaning up routers.
 	pkill -f vnet
+	pkill -f tcpr
 	;;
 
 *)
 	echo Usage:
-	echo "  $0 create      Create a backup-clique BGP network."
-	echo "  $0 start-node  Run a BGP daemon."
-	echo "  $0 stop-node   Kill a BGP daemon."
-	echo "  $0 destroy     Destroy the BGP network."
+	echo "  $0 create        Create a backup-clique BGP network."
+	echo "  $0 start         Start the routers."
+	echo "  $0 fail          Simulate failure."
+	echo "  $0 recover       Simulate recovery."
+	echo "  $0 destroy       Destroy the BGP network."
 	;;
 
 esac

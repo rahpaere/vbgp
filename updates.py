@@ -6,7 +6,7 @@ import re
 
 timestamp_format = "Timestamp: %a %b %d %H:%M:%S %Y %f us "
 microseconds_format = re.compile("(\d+) us")
-update_format = re.compile("(Deleted )?192\.168\.0\.0/16.*via 10.0.1.(\d+)")
+update_format = re.compile("(Deleted )?192\.168\.0\.0/16.*via 10.0.0.(\d+)")
 
 def reachable(nexthops):
 	nexthops = list(nexthops)

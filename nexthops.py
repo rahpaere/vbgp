@@ -39,11 +39,7 @@ for filename in argv[1:]:
 
 if updates:
 	updates.sort()
-	start = updates[0][0]
 	nexthops = [None] * nodes
 	for t, node, nexthop in updates:
 		nexthops[node] = nexthop
-		r = t - start
-		print ",".join([str(int(r.seconds * 1e6 + r.microseconds))] + [n is not None and str(n) or " " for n in nexthops])
-else:
-	print ",".join(["0"] + [" "] * nodes)
+		print "{0},{1}".format(t.strftime("%s.%f"), ",".join([n is not None and str(n) or "" for n in nexthops]))

@@ -99,6 +99,24 @@ create)
 	done
 	;;
 
+failover)
+	if test $# != 2 || test $2 -lt 2
+	then
+		echo Usage: $0 failover SIZE
+		echo SIZE must be at least 2.
+		exit 1
+	fi
+	n=$2
+	dest=`expr $n + 1`
+	tcpr=`expr ${dest} + 1`
+
+	pkill tcpr-bridge
+	for i in `seq 2 ${dest}`
+	do
+		ssh -f 10.0.0.${tcpr} tcpr-bridge -b `expr 9000 + $i` -t 10.0.0.$i:7777
+	done
+	;;
+	
 destroy)
 	vnet=`dirname $0`/vnet
 	$vnet destroy
@@ -114,6 +132,7 @@ destroy)
 *)
 	echo Usage:
 	echo "  $0 create        Create a backup-clique BGP network."
+	echo "  $0 failover      Simulate TCPR failover."
 	echo "  $0 destroy       Destroy the BGP network."
 	;;
 

@@ -70,19 +70,12 @@ monitor() {
 
 converge() {
 	echo Waiting for convergence.
-	numconverged=0
-	until test $numconverged -eq $n
+	until test -e /tmp/vnet-run${current}-nexthops.log
 	do
 		sleep 2
 		monitor
 		$nexthops $files >/tmp/vnet-nexthops.txt
-		$stretch /tmp/vnet-nexthops.txt >/tmp/vnet-stretch.txt
-		$converged /tmp/vnet-stretch.txt >/tmp/vnet-converged.txt
-		numconverged=`tail -n 1 /tmp/vnet-converged.txt | cut -d, -f2`
-		if test -z $numconverged
-		then
-			numconverged=0
-		fi
+		$split /tmp/vnet-nexthops.txt
 	done
 }
 
@@ -97,9 +90,7 @@ count=$2
 dest=`expr $n + 1`
 vnet=`dirname $0`/vnet
 nexthops=`dirname $0`/nexthops.py
-stretch=`dirname $0`/stretch.py
-converged=`dirname $0`/converged.py
-connected=`dirname $0`/connected.py
+split=`dirname $0`/split.py
 
 $vnet create ${dest}
 for i in `seq ${dest}`
@@ -114,14 +105,16 @@ do
 	ssh 10.0.0.$i /usr/lib/quagga/bgpd -d -f /tmp/vnet$i-bgpd.conf -i /tmp/vnet$i-bgpd.pid
 done
 
+rm -f /tmp/vnet-run*-nexthops.log
+current=0
 converge
 
-for i in `seq ${count}`
+for current in `seq ${count}`
 do
 	echo Waiting for MRAI.
 	sleep 35
 
-	echo Restart $i.
+	echo Restart $current.
 	pkill -f "vnet1-(zebra|bgpd)"
 	ssh 10.0.0.1 /usr/lib/quagga/zebra -d -f /tmp/vnet1-zebra.conf -i /tmp/vnet1-zebra.pid
 	ssh 10.0.0.1 /usr/lib/quagga/bgpd -d -f /tmp/vnet1-bgpd.conf -i /tmp/vnet1-bgpd.pid
@@ -132,5 +125,3 @@ $vnet destroy
 
 echo Cleaning up routers.
 pkill -f vnet
-
-$connected /tmp/vnet-stretch.txt >/tmp/vnet-connected.txt

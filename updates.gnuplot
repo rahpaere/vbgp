@@ -5,4 +5,4 @@ set datafile separator ','
 set title 'BGP Failure and Recovery'
 set xlabel 'Time (seconds)'
 set ylabel 'Connected Routers'
-plot 'updates.dat' using ($1/1e6):2 with steps notitle
+plot '/tmp/vnet-connected.txt' using ($1/1e6):2 with steps notitle

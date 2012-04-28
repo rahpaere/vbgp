@@ -1,0 +1,102 @@
+#! /bin/sh
+
+birdconf() {
+	local i
+
+	echo "log \"${dir}/$1/bird.log\" all;"
+	echo "debug protocols all;"
+	echo "router id 10.0.0.$i;"
+
+	echo "protocol device {"
+	echo "}"
+
+	echo "protocol kernel {"
+	echo " export all;"
+	echo "}"
+
+	as=`expr 65000 + $1`
+
+	if test ${dest} -eq $1
+	then
+		echo "protocol static {"
+		echo " route 192.168.0.0/16 drop;"
+		echo "}"
+		echo "protocol bgp bgp1 {"
+		echo " local as ${as};"
+		echo " neighbor 10.0.0.1 as 65001;"
+		echo " start delay time 0;"
+		echo " next hop self;"
+		echo " export where source = RTS_STATIC;"
+		echo "}"
+		echo "protocol bgp bgp2 {"
+		echo " local as ${as};"
+		echo " neighbor 10.0.0.2 as 65002;"
+		echo " start delay time 0;"
+		echo " next hop self;"
+		echo " export filter {"
+		echo "  if source = RTS_STATIC then {"
+		for i in `seq $n`
+		do
+			echo "   bgp_path.prepend(${as});"
+		done
+		echo "  }"
+		echo "  reject;"
+		echo " };"
+		echo "}"
+		return
+	fi
+
+	if test 2 -ge $1
+	then
+		max=$dest
+	else
+		max=$n
+	fi
+	for i in `seq $max`
+	do
+		if test $i -ne $1
+		then
+			echo "protocol bgp bgp$i {"
+			echo " local as ${as};"
+			echo " neighbor 10.0.0.$i as" `expr 65000 + $i`";"
+			echo " start delay time 0;"
+			echo " next hop self;"
+			echo " export all;"
+			echo "}"
+		fi
+	done
+}
+
+startscript() {
+	echo start-stop-daemon -p ${dir}/$1/bird.pid -b -m -S -a `which bird` -- -c ${dir}/$1/bird.conf -d -s ${dir}/$1/bird.ctl
+}
+
+stopscript() {
+	echo start-stop-daemon -p ${dir}/$1/bird.pid -K
+}
+
+if test $# -ne 1
+then
+	echo Usage: $0 SIZE
+	exit 1
+fi
+
+if test $1 -lt 2
+then
+	echo SIZE must be at least 2.
+	exit 1
+fi
+
+n=$1
+dest=`expr $n + 1`
+dir=`pwd`
+
+mkdir -p ${dir}
+for i in `seq ${dest}`
+do
+	echo Configuring router $i.
+	mkdir ${dir}/$i
+	birdconf $i >${dir}/$i/bird.conf
+	startscript $i >${dir}/$i/start
+	stopscript $i >${dir}/$i/stop
+done

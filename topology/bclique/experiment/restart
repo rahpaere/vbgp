@@ -1,0 +1,66 @@
+#! /bin/sh
+
+installdir=/home/burgess/vbgp
+
+update() {
+	local i
+
+	files=
+	for i in `seq $n`
+	do
+		o=${dir}/$i/updates.log
+		files="$files $o"
+		ip monitor file ${dir}/$i/rtmon.log >$o
+	done
+	${installdir}/nexthops $files >nexthops.log
+	finished=`grep  "[^,]*,$n\(,0\)\{${rest}\}" nexthops.log | wc -l`
+}
+
+converge() {
+	echo Waiting to converge.
+	update
+	until test $finished -gt $current
+	do
+		sleep 2
+		update
+	done
+
+	echo Waiting for MRAI.
+	sleep 35
+}
+
+if test $# -ne 2
+then
+	echo Usage: $0 DIR COUNT
+	exit 1
+fi
+
+dir=`(cd $1; pwd)`
+count=$2
+dest=`ls "$dir" | wc -l`
+n=`expr ${dest} - 1`
+rest=`expr ${n} - 1`
+
+${installdir}/vnet create ${dest}
+for i in `seq ${dest}`
+do
+	ssh 10.0.0.$i start-stop-daemon -p ${dir}/$i/rtmon.pid -b -m -S -a `which rtmon` -- -4 file ${dir}/$i/rtmon.log route -4 file ${dir}/$i/rtmon.log route
+	ssh 10.0.0.$i sh ${dir}/$i/start
+done
+
+current=0
+converge
+for current in `seq ${count}`
+do
+	echo Restart $current.
+	ssh 10.0.0.1 sh ${dir}/1/stop
+	ssh 10.0.0.1 sh ${dir}/1/start
+	converge
+done
+
+for i in `seq ${dest}`
+do
+	ssh 10.0.0.$i start-stop-daemon -p ${dir}/$i/rtmon.pid -K
+	ssh 10.0.0.$i sh ${dir}/$i/stop
+done
+${installdir}/vnet destroy

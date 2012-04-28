@@ -1,0 +1,95 @@
+#! /bin/sh
+
+zebraconf() {
+	echo "password secret"
+	echo "enable password secret"
+	echo "log file ${dir}/$1/zebra.log"
+	echo "ip forwarding"
+
+	if test ${dest} -eq $1
+	then
+		echo "interface lo"
+		echo " ip address 192.168.1.1/16"
+	fi
+}
+
+bgpdconf() {
+	local i
+
+	echo "password secret"
+	echo "enable password secret"
+	echo "log file ${dir}/$1/bgpd.log"
+	echo "debug bgp updates"
+
+	as=`expr 65000 + $1`
+	echo "router bgp ${as}"
+	echo " bgp router-id 10.0.0.$1"
+	echo " bgp graceful-restart"
+
+	if test ${dest} -eq $1
+	then
+		echo " network 192.168.0.0/16"
+		echo " neighbor 10.0.0.1 remote-as 65001"
+		echo " neighbor 10.0.0.2 remote-as 65002"
+		echo " neighbor 10.0.0.2 route-map backup out"
+		echo "route-map backup permit 10"
+		printf " set as-path prepend"
+		for i in `seq $n`
+		do
+			printf " ${as}"
+		done
+		echo
+		return
+	fi
+
+	for i in `seq $n`
+	do
+		if test $i -ne $1
+		then
+			echo " neighbor 10.0.0.$i remote-as" `expr 65000 + $i`
+			echo " neighbor 10.0.0.$i next-hop-self"
+		fi
+	done
+	if test 2 -ge $1
+	then
+	        echo " neighbor 10.0.0.${dest} remote-as" `expr 65000 + ${dest}`
+	fi
+}
+
+startscript() {
+	echo mkdir -p ${dir}/$i/quagga
+	echo chown quagga:quagga ${dir}/$i/quagga
+	echo /usr/lib/quagga/zebra -d -f ${dir}/$1/zebra.conf -i ${dir}/$1/quagga/zebra.pid
+	echo /usr/lib/quagga/bgpd -d -f ${dir}/$1/bgpd.conf -i ${dir}/$1/quagga/bgpd.pid
+}
+
+stopscript() {
+	echo kill \`cat ${dir}/$1/quagga/zebra.pid ${dir}/$1/quagga/bgpd.pid\`
+}
+
+if test $# -ne 1
+then
+	echo Usage: $0 SIZE
+	exit 1
+fi
+
+if test $1 -lt 2
+then
+	echo SIZE must be at least 2.
+	exit 1
+fi
+
+n=$1
+dest=`expr $n + 1`
+dir=`pwd`
+
+mkdir -p ${dir}
+for i in `seq ${dest}`
+do
+	echo Configuring router $i.
+	mkdir ${dir}/$i
+	zebraconf $i >${dir}/$i/zebra.conf
+	bgpdconf $i >${dir}/$i/bgpd.conf
+	startscript $i >${dir}/$i/start
+	stopscript $i >${dir}/$i/stop
+done

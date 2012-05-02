@@ -1,66 +1,80 @@
 #! /bin/sh
 
-installdir=/home/burgess/vbgp
+updated() {
+	ip monitor file ${dir}/nodes/$1/rtmon.log |
+	grep '^Timestamp' |
+	tail -n 1 |
+	sed -e 's/^Timestamp://;s/[[:digit:]]* us//'
+}
 
-update() {
-	local i
-
-	files=
+converged() {
+	local current max t i
+	current=`date +%s`
+	max=$1
 	for i in `seq $n`
 	do
-		o=${dir}/$i/updates.log
-		files="$files $o"
-		ip monitor file ${dir}/$i/rtmon.log >$o
+		t=`updated $i`
+		t=`date -d "$t" +%s`
+		if test $max -lt $t
+		then
+			max=$t
+		fi
 	done
-	${installdir}/nexthops $files >nexthops.log
-	finished=`grep  "[^,]*,$n\(,0\)\{${rest}\}" nexthops.log | wc -l`
+	max=`expr $max + 60`
+	if test $max -gt $current
+	then
+		return `expr $max - $current`
+	else
+		return 0
+	fi
 }
 
 converge() {
-	echo Waiting to converge.
-	update
-	until test $finished -gt $current
+	local start
+	start=`date +%s`
+	until converged $start
 	do
-		sleep 2
-		update
+		sleep $?
 	done
-
-	echo Waiting for MRAI.
-	sleep 35
 }
 
-if test $# -ne 2
+if test $# -ne 1
 then
-	echo Usage: $0 DIR COUNT
+	echo Usage: $0 COUNT
 	exit 1
 fi
 
-dir=`(cd $1; pwd)`
-count=$2
-dest=`ls "$dir" | wc -l`
-n=`expr ${dest} - 1`
-rest=`expr ${n} - 1`
+dir=`pwd`
+count=$1
+n=`ls "${dir}/nodes" | wc -l`
+dest=`expr $n + 1`
 
-${installdir}/vnet create ${dest}
-for i in `seq ${dest}`
+echo `date`: Starting initial convergence.
+for i in `seq $n`
 do
-	ssh 10.0.0.$i start-stop-daemon -p ${dir}/$i/rtmon.pid -b -m -S -a `which rtmon` -- -4 file ${dir}/$i/rtmon.log route -4 file ${dir}/$i/rtmon.log route
-	ssh 10.0.0.$i sh ${dir}/$i/start
+	ssh 192.168.1.$i start-stop-daemon -p ${dir}/nodes/$i/rtmon.pid -b -m -S -a `which rtmon` -- -4 file ${dir}/nodes/$i/rtmon.log route -4 file ${dir}/nodes/$i/rtmon.log route
+	ssh 192.168.1.$i sh ${dir}/nodes/$i/start
 done
+ssh 192.168.1.${dest} sh ${dir}/destinations/1/start
+ssh 192.168.1.${dest} sh ${dir}/destinations/2/start
 
-current=0
 converge
 for current in `seq ${count}`
 do
-	echo Restart $current.
-	ssh 10.0.0.1 sh ${dir}/1/stop
-	ssh 10.0.0.1 sh ${dir}/1/start
+	echo `date`: Beginning experiment $current.
+	ssh 192.168.1.${dest} sh ${dir}/destinations/1/stop
+	ssh 192.168.1.${dest} sh ${dir}/destinations/1/start
 	converge
 done
 
-for i in `seq ${dest}`
+echo `date`: Cleaning up.
+for i in `seq $n`
 do
-	ssh 10.0.0.$i start-stop-daemon -p ${dir}/$i/rtmon.pid -K
-	ssh 10.0.0.$i sh ${dir}/$i/stop
+	ssh 192.168.1.$i start-stop-daemon -p ${dir}/nodes/$i/rtmon.pid -K
 done
-${installdir}/vnet destroy
+for i in `seq $n`
+do
+	ssh 192.168.1.$i sh ${dir}/nodes/$i/stop
+done
+ssh 192.168.1.${dest} sh ${dir}/destinations/1/stop
+ssh 192.168.1.${dest} sh ${dir}/destinations/2/stop

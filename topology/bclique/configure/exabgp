@@ -1,0 +1,65 @@
+#! /bin/sh
+
+exabgpconf() {
+	local i
+
+	attributes="next-hop 192.168.1.${dest}"
+	if test $1 -ne 1
+	then
+		attributes="$attributes as-path ["
+		for i in `seq $n`
+		do
+			attributes="$attributes "`expr 65000 + ${dest}`
+		done
+		attributes="$attributes ]"
+	fi
+
+	echo "neighbor 192.168.1.$1 {"
+	echo " router-id 192.168.1.${dest};"
+	echo " local-address 192.168.1.${dest};"
+	echo " local-as" `expr 65000 + ${dest}`";"
+	echo " peer-as" `expr 65000 + $1`";"
+	if test $graceful = yes
+	then
+		echo " graceful-restart;"
+	fi
+	echo " static {"
+	echo "  route 10.0.0.0/24 $attributes;"
+	echo " }"
+	echo "}"
+}
+
+startscript() {
+	echo start-stop-daemon -p ${dir}/$1/exabgp.pid -b -m -S -a `which env` -- DEBUG_ALL=1 SYSLOG=${dir}/$1/exabgp.log exabgp ${dir}/$1/exabgp.conf
+}
+
+stopscript() {
+	echo start-stop-daemon -p ${dir}/$1/exabgp.pid -K -R INT/5/KILL/5
+}
+
+if test $# -ne 1 && test $# -ne 2
+then
+	echo Usage: $0 SIZE [-g]
+	exit 1
+fi
+
+n=$1
+dest=`expr $n + 1`
+dir=`pwd`/destinations
+
+if test $# -eq 2
+then
+	graceful=yes
+else
+	graceful=no
+fi
+
+mkdir -p ${dir}
+for i in 1 2
+do
+	echo Configuring destinations for router $i.
+	mkdir ${dir}/$i
+	exabgpconf $i >${dir}/$i/exabgp.conf
+	startscript $i >${dir}/$i/start
+	stopscript $i >${dir}/$i/stop
+done

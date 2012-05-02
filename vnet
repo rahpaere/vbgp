@@ -12,7 +12,7 @@ create)
 	echo Creating virtual network of $2 nodes.
 	brctl addbr vnetbr
 	ip link set vnetbr up
-	ip address add 10.0.0.254/24 dev vnetbr 
+	ip address add 192.168.1.254/24 dev vnetbr 
 
 	for i in `seq $2`
 	do
@@ -24,7 +24,7 @@ create)
 
 	for i in `seq $2`
 	do
-		until ping -c 1 10.0.0.$i >/dev/null
+		until ping -c 1 192.168.1.$i >/dev/null
 		do
 			echo Waiting for nodes to become pingable.
 			sleep 1
@@ -45,7 +45,7 @@ node)
 	ip link set lo up
 	ip link set eth0 up
 	ip link set vnet$2 netns 1
-	ip address add 10.0.0.$2/24 dev eth0
+	ip address add 192.168.1.$2/24 dev eth0
 	exec `which sshd` -o "PidFile /tmp/vnet$2-sshd.pid"
 	;;
 

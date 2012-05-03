@@ -1,0 +1,44 @@
+#! /bin/sh
+
+if test $# -ne 1
+then
+	echo Usage: $0 SECONDS
+	exit 1
+fi
+
+nodes=`cat config/network/nodes`
+seconds=$1
+
+updated() {
+	ip monitor file tmp/monitor/$1.log |
+	grep '^Timestamp' |
+	tail -n 1 |
+	sed -e 's/^Timestamp://;s/[[:digit:]]* us//'
+}
+
+converged() {
+	local current max t i
+	current=`date +%s`
+	max=0
+	for i in `seq $nodes`
+	do
+		t=`updated $i`
+		t=`date -d "$t" +%s`
+		if test $max -lt $t
+		then
+			max=$t
+		fi
+	done
+	max=`expr $max + $seconds`
+	if test $max -gt $current
+	then
+		return `expr $max - $current`
+	else
+		return 0
+	fi
+}
+
+until converged
+do
+	sleep $?
+done

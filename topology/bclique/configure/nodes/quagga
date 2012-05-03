@@ -1,0 +1,64 @@
+#! /bin/sh
+
+zebraconf() {
+	echo password secret
+	echo enable password secret
+	echo log file `pwd`/tmp/nodes/zebra$1.log
+	echo ip forwarding
+}
+
+bgpdconf() {
+	local i peers
+
+	echo password secret
+	echo enable password secret
+	echo log file `pwd`/tmp/nodes/bgpd$1.log
+	echo debug bgp updates
+
+	echo router bgp `expr 65000 + $1`
+	echo "" bgp router-id 192.168.1.$1
+	echo "" bgp graceful-restart
+
+	if test $1 -le 2
+	then
+		peers=`seq $dest`
+	else
+		peers=`seq $nodes`
+	fi
+	for i in $peers
+	do
+		if test $i -ne $1
+		then
+			echo "" neighbor 192.168.1.$i remote-as `expr 65000 + $i`
+			echo "" neighbor 192.168.1.$i next-hop-self
+		fi
+	done
+}
+
+startscript() {
+	local i
+	echo mkdir -p `pwd`/tmp/nodes
+	echo chown quagga:quagga `pwd`/tmp/nodes
+	for i in `seq $nodes`
+	do
+		echo ip netns exec vbgp$i /usr/lib/quagga/zebra -d -f `pwd`/config/nodes/zebra$i.conf -i `pwd`/tmp/nodes/zebra$i.pid
+		echo ip netns exec vbgp$i /usr/lib/quagga/bgpd -d -f `pwd`/config/nodes/bgpd$i.conf -i `pwd`/tmp/nodes/bgpd$i.pid
+	done
+}
+
+stopscript() {
+	echo kill \`cat `pwd`/tmp/nodes/*.pid\`
+}
+
+nodes=`cat config/network/nodes`
+dest=`expr $nodes + 1`
+
+mkdir -p config/nodes
+for i in `seq $nodes`
+do
+	zebraconf $i >config/nodes/zebra$i.conf
+	bgpdconf $i >config/nodes/bgpd$i.conf
+done
+startscript >config/nodes/start
+stopscript >config/nodes/stop
+chmod a+x config/nodes/start config/nodes/stop

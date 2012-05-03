@@ -1,0 +1,13 @@
+#! /bin/sh
+
+if test $# -ne 1
+then
+	echo Usage: $0 NAME
+	exit 1
+fi
+
+name=$1
+
+mkdir -p data
+mkdir data/$name
+cp tmp/monitor/*.log data/$name

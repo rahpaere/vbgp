@@ -1,0 +1,72 @@
+#! /bin/sh
+
+if test $# -lt 1
+then
+	echo Usage: $0 NAME [-b] [-g]
+	exit 1
+fi
+
+name=$1
+shift
+for o
+do
+	case "$o" in
+	-g) graceful=yes ;;
+	-b) backup=yes ;;
+	esac
+done
+
+nodes=`cat config/network/nodes`
+dest=`expr $nodes + 1`
+
+exabgpconf() {
+	local i peer
+
+	attributes="next-hop 192.168.1.$dest"
+	if test xyes = x$backup
+	then
+		peer=2
+		attributes="$attributes as-path ["
+		for i in `seq $dest`
+		do
+			attributes="$attributes "`expr 65000 + $dest`
+		done
+		attributes="$attributes ]"
+	else
+		peer=1
+	fi
+
+	echo neighbor 192.168.1.$peer {
+	echo "" router-id 192.168.1.$dest\;
+	echo "" local-address 192.168.1.$dest\;
+	echo "" local-as `expr 65000 + $dest`\;
+	echo "" peer-as `expr 65000 + $peer`\;
+	if test xyes = x$graceful
+	then
+		echo "" graceful-restart\;
+	fi
+	echo "" static {
+	echo " " route 10.0.0.0/32 "$attributes;"
+	echo "" }
+	echo }
+}
+
+startscript() {
+	echo mkdir -p tmp/routes
+	echo ip netns exec vbgp$dest env SYSLOG=tmp/routes/$name.log PID=tmp/routes/$name.pid DAEMONIZE= exabgp config/routes/$name.conf
+}
+
+restartscript() {
+	echo kill -ALRM \`cat tmp/routes/$name.pid\`
+}
+
+stopscript() {
+	echo kill -INT \`cat tmp/routes/$name.pid\`
+}
+
+mkdir -p config/routes
+exabgpconf >config/routes/$name.conf
+startscript >config/routes/start-$name
+restartscript >config/routes/restart-$name
+stopscript >config/routes/stop-$name
+chmod a+x config/routes/start-$name config/routes/restart-$name config/routes/stop-$name

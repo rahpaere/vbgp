@@ -1,0 +1,110 @@
+#! /bin/sh
+
+xorpconf() {
+	local i
+
+	echo "interfaces {"
+	echo " interface eth0 {"
+	echo "  disable: false"
+	echo "  default-system-config"
+	echo " }"
+	echo " interface my-discard {"
+	echo "  discard: true"
+	echo "  vif my-discard {"
+	echo "  }"
+	echo " }"
+	echo "}"
+
+	echo "fea {"
+	echo " unicast-forwarding4 {"
+	echo "  disable: false"
+	echo " }"
+	echo "}"
+
+	as=`expr 65000 + $1`
+	echo "protocols {"
+	echo " bgp {"
+	echo "  bgp-id: 10.0.0.$1"
+	echo "  local-as: ${as}"
+
+	if test ${dest} -eq $1
+	then
+		echo "  peer 10.0.0.1 {"
+		echo "   local-ip: 10.0.0.$1"
+		echo "   as: 65001"
+		echo "   next-hop: 10.0.0.$1"
+		echo "  }"
+		echo "  peer 10.0.0.2 {"
+		echo "   local-ip: 10.0.0.$1"
+		echo "   as: 65002"
+		echo "   next-hop: 10.0.0.$1"
+		echo "  }"
+		for i in `seq $n`
+		do
+			echo MUST PREPEND BGP PATH >&2
+		done
+		echo " }"
+		echo " static {"
+		echo "  interface-route 192.168.0.0/16 {"
+		echo "   next-hop-interface: \"my-discard\""
+		echo "   next-hop-vif: \"my-discard\""
+		echo "  }"
+		echo " }"
+		echo "}"
+		return
+	fi
+
+	if test 2 -ge $1
+	then
+		max=$dest
+	else
+		max=$n
+	fi
+	for i in `seq $max`
+	do
+		if test $i -ne $1
+		then
+			echo "  peer 10.0.0.$i {"
+			echo "   local-ip: 10.0.0.$1"
+			echo "   as:" `expr 65000 + $i`
+			echo "   next-hop: 10.0.0.$1"
+			echo "  }"
+		fi
+	done
+	echo " }"
+	echo "}"
+}
+
+startscript() {
+	echo xorp_rtrmgr -b ${dir}/$1/xorp.boot -P ${dir}/$1/xorp.pid -d -l ${dir}/$1/xorp.log
+}
+
+stopscript() {
+	echo kill \`cat ${dir}/$1/xorp.pid\`
+}
+
+if test $# -ne 1
+then
+	echo Usage: $0 SIZE
+	exit 1
+fi
+
+if test $1 -lt 2
+then
+	echo SIZE must be at least 2.
+	exit 1
+fi
+
+n=$1
+dest=`expr $n + 1`
+dir=`pwd`
+
+mkdir -p ${dir}
+for i in `seq ${dest}`
+do
+	echo Configuring router $i.
+	mkdir ${dir}/$i
+	xorpconf $i >${dir}/$i/xorp.boot
+	startscript $i >${dir}/$i/start
+	stopscript $i >${dir}/$i/stop
+done

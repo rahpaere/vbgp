@@ -1,0 +1,9 @@
+#! /bin/sh
+
+nodes=`cat config/network/nodes`
+mkdir -p tmp/monitor
+for i in `seq $nodes`
+do
+	ip netns exec vbgp$i rtmon -4 file tmp/monitor/$i.log route &
+	echo $! >tmp/monitor/$i.pid
+done

@@ -1,0 +1,8 @@
+#! /bin/sh
+
+nodes=`cat config/network/nodes`
+mkdir -p tmp/monitor
+for i in `seq $nodes`
+do
+	start-stop-daemon -p tmp/monitor/$i.pid -K -R TERM/5/KILL/5
+done

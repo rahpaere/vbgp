@@ -1,80 +1,44 @@
 #! /bin/sh
 
-updated() {
-	ip monitor file ${dir}/nodes/$1/rtmon.log |
-	grep '^Timestamp' |
-	tail -n 1 |
-	sed -e 's/^Timestamp://;s/[[:digit:]]* us//'
-}
+rundir=/home/burgess/vbgp/topology/bclique/experiment
 
-converged() {
-	local current max t i
-	current=`date +%s`
-	max=$1
-	for i in `seq $n`
-	do
-		t=`updated $i`
-		t=`date -d "$t" +%s`
-		if test $max -lt $t
-		then
-			max=$t
-		fi
-	done
-	max=`expr $max + 60`
-	if test $max -gt $current
-	then
-		return `expr $max - $current`
-	else
-		return 0
-	fi
-}
-
-converge() {
-	local start
-	start=`date +%s`
-	until converged $start
-	do
-		sleep $?
-	done
-}
-
-if test $# -ne 1
+if test $# -ne 2
 then
-	echo Usage: $0 COUNT
+	echo Usage: $0 SIZE COUNT
 	exit 1
 fi
 
 dir=`pwd`
-count=$1
-n=`ls "${dir}/nodes" | wc -l`
+n=$1
 dest=`expr $n + 1`
+count=$2
 
 echo `date`: Starting initial convergence.
+${rundir}/start $n
 for i in `seq $n`
 do
-	ssh 192.168.1.$i start-stop-daemon -p ${dir}/nodes/$i/rtmon.pid -b -m -S -a `which rtmon` -- -4 file ${dir}/nodes/$i/rtmon.log route -4 file ${dir}/nodes/$i/rtmon.log route
-	ssh 192.168.1.$i sh ${dir}/nodes/$i/start
+	ssh 192.168.1.$i ${dir}/config/nodes/start$i
 done
-ssh 192.168.1.${dest} sh ${dir}/destinations/1/start
-ssh 192.168.1.${dest} sh ${dir}/destinations/2/start
+ssh 192.168.1.${dest} ${dir}/config/routes/start1
+ssh 192.168.1.${dest} ${dir}/config/routes/start2
+${rundir}/converge $n 60
+${rundir}/stop $n
 
-converge
 for current in `seq ${count}`
 do
 	echo `date`: Beginning experiment $current.
-	ssh 192.168.1.${dest} sh ${dir}/destinations/1/stop
-	ssh 192.168.1.${dest} sh ${dir}/destinations/1/start
-	converge
+	${rundir}/start $n
+	ssh 192.168.1.${dest} ${dir}/config/routes/stop1
+	ssh 192.168.1.${dest} ${dir}/config/routes/stop2
+	${rundir}/converge $n 60
+	${rundir}/save $current
+	${rundir}/stop $n
 done
 
 echo `date`: Cleaning up.
 for i in `seq $n`
 do
-	ssh 192.168.1.$i start-stop-daemon -p ${dir}/nodes/$i/rtmon.pid -K
+	ssh 192.168.1.$i ${dir}/config/nodes/stop$i
 done
-for i in `seq $n`
-do
-	ssh 192.168.1.$i sh ${dir}/nodes/$i/stop
-done
-ssh 192.168.1.${dest} sh ${dir}/destinations/1/stop
-ssh 192.168.1.${dest} sh ${dir}/destinations/2/stop
+ssh 192.168.1.${dest} ${dir}/config/routes/stop1
+ssh 192.168.1.${dest} ${dir}/config/routes/stop2

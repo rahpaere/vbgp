@@ -43,7 +43,7 @@ exabgpconf() {
 	echo "" peer-as `expr 65000 + $peer`\;
 	if test xyes = x$graceful
 	then
-		echo "" graceful-restart\;
+		echo "" graceful-restart 30\;
 	fi
 	echo "" static {
 	echo " " route 10.0.0.0/32 "$attributes;"
@@ -53,7 +53,7 @@ exabgpconf() {
 
 startscript() {
 	echo mkdir -p tmp/routes
-	echo ip netns exec vbgp$dest env SYSLOG=tmp/routes/$name.log PID=tmp/routes/$name.pid DAEMONIZE= exabgp config/routes/$name.conf
+	echo ip netns exec vbgp$dest env DEBUG_ALL=1 SYSLOG=tmp/routes/$name.log PID=tmp/routes/$name.pid DAEMONIZE= exabgp config/routes/$name.conf
 }
 
 restartscript() {

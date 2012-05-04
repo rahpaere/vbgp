@@ -10,4 +10,4 @@ name=$1
 
 mkdir -p data
 mkdir data/$name
-cp tmp/monitor/*.log data/$name
+cp tmp/monitor/*.log tmp/monitor/*.init data/$name

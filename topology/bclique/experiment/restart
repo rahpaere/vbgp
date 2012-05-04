@@ -3,11 +3,13 @@
 rundir=/home/burgess/vbgp/topology/bclique/experiment
 
 echo `date`: Starting initial convergence.
+config/network/start
 $rundir/start
 config/nodes/start
 config/routes/start-primary
 config/routes/start-backup
-$rundir/converge 60
+$rundir/converge 80
+$rundir/save .init
 $rundir/stop
 
 for current in `seq $1`
@@ -15,7 +17,7 @@ do
 	echo `date`: Beginning experiment $current.
 	$rundir/start
 	config/routes/restart-primary
-	$rundir/converge 60
+	$rundir/converge 80
 	$rundir/save $current
 	$rundir/stop
 done
@@ -24,3 +26,5 @@ echo `date`: Cleaning up.
 config/nodes/stop
 config/routes/stop-primary
 config/routes/stop-backup
+sleep 5
+config/network/stop

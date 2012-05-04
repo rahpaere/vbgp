@@ -14,6 +14,7 @@ bgpdconf() {
 	echo enable password secret
 	echo log file `pwd`/tmp/nodes/bgpd$1.log
 	echo debug bgp updates
+	echo debug bgp events
 
 	echo router bgp `expr 65000 + $1`
 	echo "" bgp router-id 192.168.1.$1

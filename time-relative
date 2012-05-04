@@ -9,4 +9,5 @@ for line in input():
 		print "0,{}".format(values.strip())
 	else:
 		print "{:06f},{}".format(float(t) - float(prev), values.strip())
-	prev = t
+	if prev is None:
+		prev = t

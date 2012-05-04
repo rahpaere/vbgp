@@ -1,0 +1,13 @@
+#! /bin/sh
+
+cat >data/disconnectivity.gnuplot <<END
+set terminal postscript enhanced color
+set output '| ps2pdf - data/disconnectivity.pdf'
+set datafile separator ','
+set title 'Disconnectivity'
+set xlabel 'Experiment'
+set ylabel 'Disconnectivity'
+plot 'data/disconnectivity.dat' notitle
+END
+
+gnuplot data/disconnectivity.gnuplot

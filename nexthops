@@ -6,7 +6,7 @@ import re
 
 timestamp_format = "Timestamp: %a %b %d %H:%M:%S %Y %f us "
 microseconds_format = re.compile("(\d+) us")
-update_format = re.compile("(Deleted )?10\.0\.0\.0/24.*via 192.168.1.(\d+)")
+update_format = re.compile("(Deleted )?10\.0\.0\.0 via 192.168.1.(\d+)")
 
 updates = []
 nodes = 0

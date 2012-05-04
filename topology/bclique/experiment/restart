@@ -2,43 +2,25 @@
 
 rundir=/home/burgess/vbgp/topology/bclique/experiment
 
-if test $# -ne 2
-then
-	echo Usage: $0 SIZE COUNT
-	exit 1
-fi
-
-dir=`pwd`
-n=$1
-dest=`expr $n + 1`
-count=$2
-
 echo `date`: Starting initial convergence.
-${rundir}/start $n
-for i in `seq $n`
-do
-	ssh 192.168.1.$i ${dir}/config/nodes/start$i
-done
-ssh 192.168.1.${dest} ${dir}/config/routes/start1
-ssh 192.168.1.${dest} ${dir}/config/routes/start2
-${rundir}/converge $n 60
-${rundir}/stop $n
+$rundir/start
+config/nodes/start
+config/routes/start-primary
+config/routes/start-backup
+$rundir/converge 60
+$rundir/stop
 
-for current in `seq ${count}`
+for current in `seq $1`
 do
 	echo `date`: Beginning experiment $current.
-	${rundir}/start $n
-	ssh 192.168.1.${dest} ${dir}/config/routes/stop1
-	ssh 192.168.1.${dest} ${dir}/config/routes/stop2
-	${rundir}/converge $n 60
-	${rundir}/save $current
-	${rundir}/stop $n
+	$rundir/start
+	config/routes/restart-primary
+	$rundir/converge 60
+	$rundir/save $current
+	$rundir/stop
 done
 
 echo `date`: Cleaning up.
-for i in `seq $n`
-do
-	ssh 192.168.1.$i ${dir}/config/nodes/stop$i
-done
-ssh 192.168.1.${dest} ${dir}/config/routes/stop1
-ssh 192.168.1.${dest} ${dir}/config/routes/stop2
+config/nodes/stop
+config/routes/stop-primary
+config/routes/stop-backup

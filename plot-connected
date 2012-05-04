@@ -1,0 +1,19 @@
+#! /bin/sh
+
+cat >data/connected.gnuplot <<END
+set terminal postscript enhanced color
+set output '| ps2pdf - data/connected.pdf'
+set datafile separator ','
+set title 'Connected Routers'
+set xlabel 'Time (seconds)'
+set ylabel '# Routers'
+END
+
+prefix='plot '
+for i in data/*/connected.log
+do
+	printf "${prefix}'$i' with steps notitle" >>data/connected.gnuplot
+	prefix=", \\\\\\n  "
+done
+
+gnuplot data/connected.gnuplot

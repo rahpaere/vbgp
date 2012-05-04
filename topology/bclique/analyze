@@ -1,0 +1,23 @@
+#! /bin/sh
+
+rundir=/home/burgess/vbgp
+nodes=`cat config/network/nodes`
+
+for i in data/*
+do
+	if ! test -d $i
+	then
+		continue
+	fi
+	for n in `seq $nodes`
+	do
+		ip monitor file $i/$n.log >$i/$n.log.txt
+		echo $i/$n.log.txt
+	done | xargs $rundir/nexthops >$i/nexthops-absolute.log
+	$rundir/time-relative $i/nexthops-absolute.log >$i/nexthops.log
+	$rundir/stretch $i/nexthops.log >$i/stretch.log
+	$rundir/connected $i/stretch.log >$i/connected.log
+	$rundir/converged $i/stretch.log >$i/converged.log
+	$rundir/disconnectivity $i/stretch.log >$i/disconnectivity.dat
+done
+cat data/*/disconnectivity.dat | sort -n >data/disconnectivity.dat

@@ -21,3 +21,6 @@ do
 	$rundir/disconnectivity $i/stretch.log >$i/disconnectivity.dat
 done
 cat data/*/disconnectivity.dat | sort -n >data/disconnectivity.dat
+$rundir/plot-connected
+$rundir/plot-converged
+$rundir/plot-disconnectivity

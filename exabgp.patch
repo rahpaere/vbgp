@@ -1,0 +1,39 @@
+diff -Naur exabgp-2.0.8.old/lib/exabgp/network/connection.py exabgp-2.0.8/lib/exabgp/network/connection.py
+--- exabgp-2.0.8.old/lib/exabgp/network/connection.py	2012-04-01 12:47:18.000000000 -0400
++++ exabgp-2.0.8/lib/exabgp/network/connection.py	2012-05-04 11:42:21.673059392 -0400
+@@ -158,6 +158,9 @@
+ 		if number == 0: return ''
+ 		try:
+ 			r = self.io.recv(number)
++			if not r:
++				self.close()
++				raise Failure('Unexpected close.')
+ 			self.last_read = time.time()
+ 			logger.wire(LazyFormat("%15s RECV " % self.peer,hexa,r))
+ 			return r
+diff -Naur exabgp-2.0.8.old/lib/exabgp/network/peer.py exabgp-2.0.8/lib/exabgp/network/peer.py
+--- exabgp-2.0.8.old/lib/exabgp/network/peer.py	2012-04-01 12:47:18.000000000 -0400
++++ exabgp-2.0.8/lib/exabgp/network/peer.py	2012-05-08 12:50:54.118105906 -0400
+@@ -10,6 +10,7 @@
+ import time
+ import traceback
+ 
++from exabgp.structure.address import AFI, SAFI
+ from exabgp.message              import Failure
+ from exabgp.message.nop          import NOP
+ from exabgp.message.open         import Open,Capabilities
+@@ -171,10 +172,13 @@
+ 				self.open.capabilities.announced(Capabilities.MULTIPROTOCOL_EXTENSIONS) and \
+ 				self.open.capabilities.announced(Capabilities.GRACEFUL_RESTART):
+ 
+-				families = []
++				families = [(AFI.ipv4, SAFI.unicast)]
+ 				for family in self.open.capabilities[Capabilities.GRACEFUL_RESTART].families():
+ 					if family in self.neighbor.families:
+ 						families.append(family)
++				logger.supervisor('I support %s' % self.open.capabilities[Capabilities.GRACEFUL_RESTART])
++				logger.supervisor('Peer supports %s' % self.neighbor.families)
++				logger.supervisor('Sending EOR for %s' % families)
+ 				self.bgp.new_eors(families)
+ 				if families:
+ 					eor = True

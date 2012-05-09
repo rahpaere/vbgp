@@ -1,13 +1,14 @@
 #! /bin/sh
 
-if test $# -lt 1
+if test $# -lt 2
 then
-	echo Usage: $0 NAME [-b] [-g]
+	echo Usage: $0 NAME COUNT [-b] [-g]
 	exit 1
 fi
 
 name=$1
-shift
+max=`expr $2 - 1`
+shift 2
 for o
 do
 	case "$o" in
@@ -46,7 +47,13 @@ exabgpconf() {
 		echo "" graceful-restart 30\;
 	fi
 	echo "" static {
-	echo " " route 10.0.0.0/32 "$attributes;"
+	for i in `seq 0 $max`
+	do
+		a=`expr \( $i / 655356 \) % 256`
+		b=`expr \( $i / 256 \) % 256`
+		c=`expr $i % 256`
+		echo " " route 10.$a.$b.$c/32 "$attributes;"
+	done
 	echo "" }
 	echo }
 }

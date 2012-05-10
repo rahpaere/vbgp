@@ -32,6 +32,7 @@ bgpdconf() {
 		then
 			echo "" neighbor 192.168.1.$i remote-as `expr 65000 + $i`
 			echo "" neighbor 192.168.1.$i next-hop-self
+			echo "" neighbor 192.168.1.$i advertisement-interval 5
 		fi
 	done
 }

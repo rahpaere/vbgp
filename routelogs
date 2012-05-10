@@ -1,0 +1,23 @@
+#! /bin/sh
+
+current=1
+while read line
+do
+	case "$line" in
+	Timestamp:*)
+		seconds=`echo "$line" | sed -e 's/^Timestamp://;s/[[:digit:]]* us//' | xargs -d \n date +%s -d`
+		microseconds=`echo "$line" | sed -e 's/.* \([[:digit:]]*\) us/\1/'`
+		timestamp=`printf "%d.%06d\n" $seconds $microseconds`
+		;;
+
+	Deleted\ 10.*)
+		prefix=`echo "$line" | cut -d ' ' -f 2`
+		echo $timestamp $prefix $current
+		;;
+	10.*)
+		prefix=`echo "$line" | cut -d ' ' -f 1`
+		nexthop=`echo "$line" | sed -e 's/.*192\.168\.1\.\([[:digit:]]*\) .*/\1/'`
+		echo $timestamp $prefix $current $nexthop
+		;;
+	esac
+done

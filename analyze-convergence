@@ -1,0 +1,10 @@
+#! /bin/sh
+
+mkdir -p data
+for dir in run-*
+do
+	start=`cat "$dir"/experiment/start`
+	stop=`cat "$dir"/experiment/stop`
+	tshark -r "$dir"/monitor/bgp.pcap -R "bgp.type!=4 && frame.time_epoch>=$start && frame.time_epoch<$stop" -T fields -e frame.time_delta_displayed |
+	awk '{t += $1} END {print t}'
+done | sort -n > data/convergence

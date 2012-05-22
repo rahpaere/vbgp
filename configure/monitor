@@ -15,7 +15,7 @@ do
 	echo \$! >run/monitor/rtmon\$i.pid
 done
 
-tcpdump -i nodes -w run/monitor/bgp.pcap -U tcp port bgp &
+tcpdump -i nodes -w run/monitor/bgp.pcap -U tcp port bgp 2>/dev/null &
 echo \$! >run/monitor/tcpdump.pid
 END
 chmod a+x monitor/start
@@ -34,8 +34,8 @@ cat >monitor/converge <<END
 start=\`date +%s\`
 while true
 do
-	last=\`tshark -r "$DIR"/run/monitor/bgp.pcap -T fields -R 'bgp.type==1 || bgp.type==2' -e frame.time_epoch | tail -n 1 | cut -d. -f1\`
-	if test \$last -lt \$start
+	last=\`tshark -r "$DIR"/run/monitor/bgp.pcap -T fields -R 'bgp.type!=4' -e frame.time_epoch 2>/dev/null | tail -n 1 | cut -d. -f1\`
+	if test -z "\$last" || test \$last -lt \$start
 	then
 		last=\$start
 	fi

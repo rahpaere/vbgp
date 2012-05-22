@@ -32,10 +32,15 @@ for i in \`seq $NODES\`
 do
 	ip link set node\$i down
 	ip link delete node\$i
-	ip netns delete node\$i
 done
 
 ip link set nodes down
 ip link delete nodes
+
+sleep 5
+for i in \`seq $NODES\`
+do
+	ip netns delete node\$i
+done
 END
 chmod a+x network/stop

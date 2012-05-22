@@ -1,0 +1,10 @@
+#! /bin/sh
+
+NODES=`cat bgp/clique`
+mkdir -p data
+for dir in run-*
+do
+	start=`cat "$dir"/experiment/start`
+	stop=`cat "$dir"/experiment/stop`
+	tshark -r "$dir"/monitor/bgp.pcap -R "frame.time_epoch>=$start && frame.time_epoch<$stop" -T fields -e bgp.nlri_prefix -e bgp.withdrawn_prefix | wc -w
+done | sort -n | awk "{print \$1 / $NODES}" >data/updates

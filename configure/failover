@@ -1,0 +1,28 @@
+#! /bin/sh
+
+mkdir -p experiment
+cat >experiment/run <<END
+#! /bin/sh
+
+mkdir -p run/experiment
+
+
+network/start
+monitor/start
+bgp/start
+routes/primary/start
+monitor/converge
+
+date +%s >run/experiment/start
+
+routes/primary/restart
+monitor/converge
+
+date +%s >run/experiment/stop
+
+bgp/stop
+routes/primary/stop
+monitor/stop
+network/stop
+END
+chmod a+x experiment/run

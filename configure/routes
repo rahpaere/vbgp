@@ -27,14 +27,14 @@ chmod a+x routes/$NAME/start
 cat >routes/$NAME/restart <<END
 #! /bin/sh
 
-kill -ALRM \`cat "$DIR"/run/routes/$NAME/exabgp.pid
+kill -ALRM \`cat "$DIR"/run/routes/$NAME/exabgp.pid\`
 END
 chmod a+x routes/$NAME/restart
 
 cat >routes/$NAME/stop <<END
 #! /bin/sh
 
-kill -INT \`cat "$DIR"/run/routes/$NAME/exabgp.pid
+kill -INT \`cat "$DIR"/run/routes/$NAME/exabgp.pid\`
 END
 chmod a+x routes/$NAME/stop
 

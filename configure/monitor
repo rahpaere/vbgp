@@ -1,0 +1,52 @@
+#! /bin/sh
+
+DIR=`pwd`
+NODES=`cat network/nodes`
+
+mkdir -p monitor
+
+cat >monitor/start <<END
+#! /bin/sh
+
+mkdir -p run/monitor
+for i in \`seq $NODES\`
+do
+	ip netns exec node\$i rtmon -4 file run/monitor/rtmon\$i.log route &
+	echo \$! >run/monitor/rtmon\$i.pid
+done
+
+tcpdump -i nodes -w run/monitor/bgp.pcap -U tcp port bgp &
+echo \$! >run/monitor/tcpdump.pid
+END
+chmod a+x monitor/start
+
+cat >monitor/stop <<END
+#! /bin/sh
+
+kill \`cat "$DIR"/run/monitor/*.pid\`
+mv run run-\`date +%s\`
+END
+chmod a+x monitor/stop
+
+cat >monitor/converge <<END
+#! /bin/sh
+
+start=\`date +%s\`
+while true
+do
+	last=\`tshark -r "$DIR"/run/monitor/bgp.pcap -T fields -R 'bgp.type==1 || bgp.type==2' -e frame.time_epoch | tail -n 1 | cut -d. -f1\`
+	if test \$last -lt \$start
+	then
+		last=\$start
+	fi
+	now=\`date +%s\`
+	idle=\`expr \$now - \$last\`
+	if test 15 -lt \$idle
+	then
+		exit
+	else
+		sleep \`expr 15 - \$idle\`
+	fi
+done
+END
+chmod a+x monitor/converge

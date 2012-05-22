@@ -1,0 +1,103 @@
+#! /usr/bin/python
+
+from datetime import datetime
+from sys import stdin, argv
+from glob import glob
+from subprocess import Popen, PIPE
+from os import makedirs
+from errno import EEXIST
+import re
+
+timestamp_format = "Timestamp: %a %b %d %H:%M:%S %Y %f us "
+microseconds_format = re.compile("(\d+) us")
+update_format = re.compile("(Deleted )?10\.0\.0\.1 via 192.168.1.(\d+)")
+
+def connected(node, nexthops, path=None):
+        if path is None:
+                path = list()
+        if node is None:
+		return False
+        elif node in path:
+		return False
+        elif node == len(nexthops):
+		return True
+        path.append(node)
+        return connected(nexthops[node], nexthops, path)
+
+def disconnectivity(nexthops):
+	return float(len([node for node in range(len(nexthops)) if not connected(node, nexthops)])) / float(len(nexthops))
+
+with open("bgp/clique") as f:
+	nodes = int(f.read())
+
+discos = []
+for run in glob("run-*"):
+	try:
+		makedirs("{}/data".format(run))
+	except OSError as e:
+		if e.errno == EEXIST:
+			pass
+		else:
+			raise
+
+	with open("{}/experiment/start".format(run)) as f:
+		start = datetime.fromtimestamp(float(f.read()))
+	with open("{}/experiment/stop".format(run)) as f:
+		stop = datetime.fromtimestamp(float(f.read()))
+
+	updates = []
+	for node in range(1, nodes + 1):
+		t = None
+		with Popen(["ip", "monitor", "file", "{}/monitor/rtmon{:d}.log".format(run, node)], stdout=PIPE).stdout as log:
+			for line in log:
+				try:
+					t = datetime.strptime(line, timestamp_format)
+					m = microseconds_format.search(line)
+					if m is None:
+						print "Bad microseconds."
+						continue
+					t = t.replace(microsecond=int(m.group(1)))
+					continue
+				except ValueError:
+					pass
+	
+				m = update_format.match(line)
+				if m is None:
+					continue
+	
+				if m.group(1) is not None:
+					nexthop = None
+				else:
+					nexthop = int(m.group(2)) - 1
+	
+				updates.append((t, node - 1, nexthop))
+	updates.sort()
+	nexthops = [None] * nodes
+	oldnexthops = list(nexthops)
+	started = False
+	disco = 0.0
+	with open("{}/data/nexthops".format(run), 'w') as out:
+		for t, node, nexthop in updates:
+			nexthops[node] = nexthop
+			if start <= t and t < stop:
+				if not started:
+					started = True
+					oldt = start
+					out.write("{},{}\n".format(oldt.strftime("%s.%f"), ",".join([n is not None and str(n) or "" for n in oldnexthops])))
+				out.write("{},{}\n".format(t.strftime("%s.%f"), ",".join([n is not None and str(n) or "" for n in nexthops])))
+				disco += disconnectivity(oldnexthops) * (t - oldt).total_seconds()
+			oldnexthops = list(nexthops)
+			oldt = t
+	discos.append(disco)
+
+try:
+	makedirs("data")
+except OSError as e:
+	if e.errno == EEXIST:
+		pass
+	else:
+		raise
+with open("data/disconnectivity", "w") as out:
+	discos.sort()
+	for d in discos:
+		out.write("{:f}\n".format(d))

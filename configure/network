@@ -1,45 +1,41 @@
 #! /bin/sh
 
-if test $# -ne 1
-then
-	echo Usage: $0 SIZE
-	exit 1
-fi
+: ${NODES:=1}
 
-nodes=$1
-dest=`expr $nodes + 1`
+mkdir -p network
+echo $NODES >network/nodes
 
-startscript() {
-	local i
-	echo brctl addbr vbgp
-	echo ip link set vbgp up
-	for i in `seq $dest`
-	do
-		echo ip netns add vbgp$i
-		echo ip link add name vbgp$i type veth peer name vbgpeth$i
-		echo ip link set vbgpeth$i netns vbgp$i name eth0
-		echo ip netns exec vbgp$i ip address add 192.168.1.$i/24 dev eth0
-		echo ip netns exec vbgp$i ip link set eth0 up
-		echo ip netns exec vbgp$i ip link set lo up
-		echo ip link set vbgp$i up
-		echo brctl addif vbgp vbgp$i
-	done
-}
+cat >network/start <<END
+#! /bin/sh
 
-stopscript() {
-	local i
-	for i in `seq $dest`
-	do
-		echo ip link set vbgp$i down
-		echo ip link del vbgp$i
-		echo ip netns del vbgp$i
-	done
-	echo ip link set vbgp down
-	echo brctl delbr vbgp
-}
+ip link add nodes type bridge
+ip link set nodes up
 
-mkdir -p config/network
-echo $nodes >config/network/nodes
-startscript >config/network/start
-stopscript >config/network/stop
-chmod a+x config/network/start config/network/stop
+for i in \`seq $NODES\`
+do
+	ip netns add node\$i
+	ip link add node\$i type veth peer name nodeeth\$i
+	ip link set node\$i master nodes
+	ip link set node\$i up
+	ip link set nodeeth\$i netns node\$i name eth0
+	ip netns exec node\$i ip address add 192.168.1.\$i/24 dev eth0
+	ip netns exec node\$i ip link set eth0 up
+	ip netns exec node\$i ip link set lo up
+done
+END
+chmod a+x network/start
+
+cat >network/stop <<END
+#! /bin/sh
+
+for i in \`seq $NODES\`
+do
+	ip link set node\$i down
+	ip link delete node\$i
+	ip netns delete node\$i
+done
+
+ip link set nodes down
+ip link delete nodes
+END
+chmod a+x network/stop

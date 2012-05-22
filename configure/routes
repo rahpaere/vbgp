@@ -1,79 +1,74 @@
 #! /bin/sh
 
-if test $# -lt 2
+DIR=`pwd`
+NODES=`cat network/nodes`
+
+if test 2 -gt "$NODES"
 then
-	echo Usage: $0 NAME COUNT [-b] [-g]
+	echo Network is unconfigured or too small.
 	exit 1
 fi
 
-name=$1
-max=`expr $2 - 1`
-shift 2
-for o
-do
-	case "$o" in
-	-g) graceful=yes ;;
-	-b) backup=yes ;;
-	esac
-done
+: ${NAME:=primary}
+: ${NODE:=$NODES}
+: ${PEER:=1}
+: ${PREFIXES:=1}
 
-nodes=`cat config/network/nodes`
-dest=`expr $nodes + 1`
+mkdir -p routes/$NAME
+
+cat >routes/$NAME/start <<END
+#! /bin/sh
+
+mkdir -p run/routes/$NAME
+ip netns exec node$NODE env DEBUG_ALL=1 SYSLOG="$DIR"/run/routes/$NAME/exabgp.log PID="$DIR"/run/routes/$NAME/exabgp.pid DAEMONIZE= exabgp "$DIR"/routes/$NAME/exabgp.conf
+END
+chmod a+x routes/$NAME/start
+
+cat >routes/$NAME/restart <<END
+#! /bin/sh
+
+kill -ALRM \`cat "$DIR"/run/routes/$NAME/exabgp.pid
+END
+chmod a+x routes/$NAME/restart
+
+cat >routes/$NAME/stop <<END
+#! /bin/sh
+
+kill -INT \`cat "$DIR"/run/routes/$NAME/exabgp.pid
+END
+chmod a+x routes/$NAME/stop
 
 exabgpconf() {
-	local i peer
-
-	attributes="next-hop 192.168.1.$dest"
-	if test xyes = x$backup
+	attributes="next-hop 192.168.1.$NODE"
+	if test 1 -ne "$PEER"
 	then
-		peer=2
 		attributes="$attributes as-path ["
-		for i in `seq $dest`
+		for i in `seq $NODES`
 		do
-			attributes="$attributes "`expr 65000 + $dest`
+			attributes="$attributes "`expr 65000 + $NODE`
 		done
 		attributes="$attributes ]"
-	else
-		peer=1
 	fi
 
-	echo neighbor 192.168.1.$peer {
-	echo "" router-id 192.168.1.$dest\;
-	echo "" local-address 192.168.1.$dest\;
-	echo "" local-as `expr 65000 + $dest`\;
-	echo "" peer-as `expr 65000 + $peer`\;
-	if test xyes = x$graceful
+	printf "neighbor 192.168.1.$PEER {\n"
+	printf "\trouter-id 192.168.1.$NODE;\n"
+	printf "\tlocal-address 192.168.1.$NODE;\n"
+	printf "\tlocal-as %s;\n" `expr 65000 + $NODE`
+	printf "\tpeer-as %s;\n" `expr 65000 + $PEER`
+	if test -n "$GRACEFUL"
 	then
-		echo "" graceful-restart 30\;
+		printf "\tgraceful-restart 30;\n"
 	fi
-	echo "" static {
-	for i in `seq 0 $max`
+	printf "\tstatic {\n"
+	for i in `seq $PREFIXES`
 	do
 		a=`expr \( $i / 655356 \) % 256`
 		b=`expr \( $i / 256 \) % 256`
 		c=`expr $i % 256`
-		echo " " route 10.$a.$b.$c/32 "$attributes;"
+		printf "\t\troute 10.$a.$b.$c/32 $attributes;\n"
 	done
-	echo "" }
-	echo }
+	printf "\t}\n"
+	printf "}\n"
 }
 
-startscript() {
-	echo mkdir -p tmp/routes
-	echo ip netns exec vbgp$dest env DEBUG_ALL=1 SYSLOG=tmp/routes/$name.log PID=tmp/routes/$name.pid DAEMONIZE= exabgp config/routes/$name.conf
-}
-
-restartscript() {
-	echo kill -ALRM \`cat tmp/routes/$name.pid\`
-}
-
-stopscript() {
-	echo kill -INT \`cat tmp/routes/$name.pid\`
-}
-
-mkdir -p config/routes
-exabgpconf >config/routes/$name.conf
-startscript >config/routes/start-$name
-restartscript >config/routes/restart-$name
-stopscript >config/routes/stop-$name
-chmod a+x config/routes/start-$name config/routes/restart-$name config/routes/stop-$name
+exabgpconf >routes/$NAME/exabgp.conf

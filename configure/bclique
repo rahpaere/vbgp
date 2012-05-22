@@ -1,0 +1,78 @@
+#! /bin/sh
+
+DIR=`pwd`
+NODES=`cat network/nodes`
+
+if test 2 -gt "$NODES"
+then
+	echo Network is unconfigured or too small.
+	exit 1
+fi
+
+: ${EXTERNAL:=1}
+: ${CLIQUE:=`expr $NODES - 1`}
+
+mkdir -p bgp
+echo $CLIQUE >bgp/clique
+
+cat >bgp/start <<END
+#! /bin/sh
+
+mkdir -p "$DIR/run/bgp"
+chown quagga:quagga "$DIR/run/bgp"
+for i in \`seq $CLIQUE\`
+do
+	ip netns exec node\$i /usr/lib/quagga/zebra -d -f "$DIR/bgp/zebra\$i.conf" -i "$DIR/run/bgp/zebra\$i.pid"
+	ip netns exec node\$i /usr/lib/quagga/bgpd -d -f "$DIR/bgp/bgpd\$i.conf" -i "$DIR/run/bgp/bgpd\$i.pid"
+done
+END
+chmod a+x bgp/start
+
+cat >bgp/stop <<END
+#! /bin/sh
+
+kill \`cat "$DIR"/run/bgp/*.pid\`
+END
+chmod a+x bgp/stop
+
+zebraconf() {
+	printf "password secret\n"
+	printf "enable password secret\n"
+	printf "log file $DIR/run/bgp/zebra$1.log\n"
+	printf "ip forwarding\n"
+}
+
+bgpdconf() {
+	printf "password secret\n"
+	printf "enable password secret\n"
+	printf "log file $DIR/run/bgp/bgpd$1.log\n"
+	printf "debug bgp updates\n"
+	printf "debug bgp events\n"
+
+	printf "router bgp %d\n" `expr 65000 + $1`
+	printf "\tbgp router-id 192.168.1.$1\n"
+	printf "\tbgp graceful-restart\n"
+
+	local i peers
+	if test $1 -le $EXTERNAL
+	then
+		peers=`seq $NODES`
+	else
+		peers=`seq $CLIQUE`
+	fi
+	for i in $peers
+	do
+		if test $i -ne $1
+		then
+			printf "\tneighbor 192.168.1.$i remote-as %d\n" `expr 65000 + $i`
+			printf "\tneighbor 192.168.1.$i next-hop-self\n"
+			printf "\tneighbor 192.168.1.$i advertisement-interval 5\n"
+		fi
+	done
+}
+
+for i in `seq $CLIQUE`
+do
+	zebraconf $i >bgp/zebra$i.conf
+	bgpdconf $i >bgp/bgpd$i.conf
+done

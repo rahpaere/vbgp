@@ -79,10 +79,10 @@ for run in glob("run-*"):
 	
 				updates.append((t, node - 1, nexthop))
 	updates.sort()
+	rundiscos = [0] * nodes
 	nexthops = [None] * nodes
 	oldnexthops = list(nexthops)
 	started = False
-	disco = 0.0
 	with open("{}/data/nexthops".format(run), 'w') as out:
 		for t, node, nexthop in updates:
 			nexthops[node] = nexthop
@@ -92,10 +92,12 @@ for run in glob("run-*"):
 					oldt = start
 					out.write("{},{}\n".format(oldt.strftime("%s.%f"), ",".join([n is not None and str(n) or "" for n in oldnexthops])))
 				out.write("{},{}\n".format(t.strftime("%s.%f"), ",".join([n is not None and str(n) or "" for n in nexthops])))
-				disco += disconnectivity(oldnexthops) * (t - oldt).total_seconds()
+				for n in range(nodes):
+					if not connected(n, oldnexthops):
+						rundiscos[n] += (t - oldt).total_seconds()
 			oldnexthops = list(nexthops)
 			oldt = t
-	discos.append(disco)
+	discos.extend(rundiscos)
 
 try:
 	makedirs("data")

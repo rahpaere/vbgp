@@ -38,6 +38,7 @@ with open("bgp/clique") as f:
 	nodes = int(f.read())
 
 discos = []
+convergences = []
 for run in glob("run-*"):
 	try:
 		makedirs("{}/data".format(run))
@@ -95,9 +96,13 @@ for run in glob("run-*"):
 				for n in range(nodes):
 					if not connected(n, oldnexthops):
 						rundiscos[n] += (t - oldt).total_seconds()
+				oldt = t
 			oldnexthops = list(nexthops)
-			oldt = t
 	discos.extend(rundiscos)
+	if started:
+		convergences.append((oldt - start).total_seconds())
+	else:
+		convergences.append(0.0)
 
 try:
 	makedirs("data")
@@ -110,3 +115,7 @@ with open("data/disconnectivity", "w") as out:
 	discos.sort()
 	for d in discos:
 		out.write("{:f}\n".format(d))
+with open("data/convergence", "w") as out:
+	convergences.sort()
+	for t in convergences:
+		out.write("{:f}\n".format(t))

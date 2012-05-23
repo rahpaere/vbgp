@@ -67,8 +67,15 @@ bgpdconf() {
 			printf "\tneighbor 192.168.1.$i remote-as %d\n" `expr 65000 + $i`
 			printf "\tneighbor 192.168.1.$i next-hop-self\n"
 			printf "\tneighbor 192.168.1.$i advertisement-interval 5\n"
+			printf "\tneighbor 192.168.1.$i route-map rm-single in\n"
 		fi
 	done
+
+	printf "access-list filter permit 10.0.0.1/32\n"
+	printf "access-list filter deny any\n"
+	printf "route-map rm-single permit 10\n"
+	printf "\tmatch ip address filter\n"
+	printf "route-map rm-single deny 20\n"
 }
 
 for i in `seq $CLIQUE`

@@ -13,6 +13,7 @@ fi
 : ${NODE:=$NODES}
 : ${PEER:=1}
 : ${PREFIXES:=1}
+: ${FAILED:=0}
 
 mkdir -p routes/$NAME
 
@@ -34,7 +35,7 @@ chmod a+x routes/$NAME/restart
 cat >routes/$NAME/stop <<END
 #! /bin/sh
 
-kill -INT \`cat "$DIR"/run/routes/$NAME/exabgp.pid\`
+kill -KILL \`cat "$DIR"/run/routes/$NAME/exabgp.pid\`
 END
 chmod a+x routes/$NAME/stop
 
@@ -57,12 +58,13 @@ exabgpconf() {
 	printf "\tpeer-as %s;\n" `expr 65000 + $PEER`
 	if test -n "$GRACEFUL"
 	then
-		printf "\tgraceful-restart 30;\n"
+		printf "\tgraceful-restart 360;\n"
 	fi
 	printf "\tstatic {\n"
-	for i in `seq $PREFIXES`
+	start=`expr 1 + $FAILED`
+	for i in `seq $start $PREFIXES`
 	do
-		a=`expr \( $i / 655356 \) % 256`
+		a=`expr \( $i / 65536 \) % 256`
 		b=`expr \( $i / 256 \) % 256`
 		c=`expr $i % 256`
 		printf "\t\troute 10.$a.$b.$c/32 $attributes;\n"

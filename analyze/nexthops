@@ -12,12 +12,19 @@ timestamp_format = "Timestamp: %a %b %d %H:%M:%S %Y %f us "
 microseconds_format = re.compile("(\d+) us")
 update_format = re.compile("(Deleted )?10\.0\.0\.1 via 192.168.1.(\d+)")
 
+if len(argv) > 1:
+	primaryfail = True
+else:
+	primaryfail = False
+
 def connected(node, nexthops, path=None):
         if path is None:
                 path = list()
         if node is None:
 		return False
         elif node in path:
+		return False
+	elif node == 0 and primaryfail:
 		return False
         elif node == len(nexthops):
 		return True
